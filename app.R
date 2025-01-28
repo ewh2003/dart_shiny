@@ -7,61 +7,83 @@ og_fixed <- readRDS(file = "og_fixed.rds")
 og_pedigree <- readxl::read_excel(path = "Full_colony_pedigree_15Oct.xlsx") %>%
   as.data.frame()
 
+matches <- c("I", "FS/PO","HS","1C","HC","2C","H2C","3C","U")
 
 # Compares two pedigrees passed through recode_embid9 
-ped_compare <- function(ped1, ped2, whole_df = F ,selected.ind = NA, listed.ind = NA){
+ped_compare <- function(ped1, ped2, whole_df = F ,selected.ind = NA, listed.ind = NA,mm.deg = F,just.mism =F){
   
+  # Direct comparison of pedigrees
   overlap <- rownames(ped2[which(rownames(ped2) %in% rownames(ped1))])
   
+  matches <- c("I","FS/PO","HS","1C","HC","2C","H2C","3C","U")
+  
   stripped.ped1 <- ped1[overlap,overlap]
-  stripped.ped2 <- ped2[rownames(stripped.ped1), colnames(stripped.ped1)]
+  stripped.ped2 <- ped2[rownames(stripped.ped1), colnames(stripped.ped1)] %>%
+    as.matrix()
   
   mismatchs <- stripped.ped1
+  degree.mm <- stripped.ped1
+
   
-  for(i in 1:ncol(stripped.ped1)){
-    for(j in 1:nrow(stripped.ped1)){
+  for(i in 1:nrow(stripped.ped1)){
+    for(j in 1:ncol(stripped.ped1)){
       if(stripped.ped1[i,j] == stripped.ped2[i,j]){
         mismatchs[i,j] <- "M"
+        degree.mm[i,j] <- 0
       }else{
+        st2 <- which(matches %in% stripped.ped2[i,j])[1]
         mismatchs[i,j] <- "MisM"
+        degree.mm[i,j] <- abs(which(matches%in% stripped.ped1[i,j]) - which(matches %in% stripped.ped2[i,j])[1])
       }
       
     }
   }
   
-  if(whole_df == T){
+  if(whole_df==T & mm.deg==T){
+    df <- mismatchs
+    return(list(df, degree.mm))
+  }else if(whole_df == T & mm.deg==F){
     return(mismatchs)
   }
+
   
+  # Return df of list of individuals
   if(is.na(selected.ind)==F){
     select_char <- selected.ind
-    df <- cbind(as.vector(stripped.ped1[select_char,]),
+    df <- cbind(as.vector(rownames(stripped.ped1)),
+                as.vector(stripped.ped1[select_char,]),
                 as.vector(stripped.ped2[select_char,]), 
-                as.vector(mismatchs[select_char,]))
-    colnames(df) <- c("Ped1","Ped2","Mismatches")
+                as.vector(mismatchs[select_char,]), 
+                as.vector(degree.mm[select_char,]))
+    colnames(df) <- c("ID","Ped1","Ped2","Mismatches","Degree MM")
     return(df)
-    
-  }else{
+  } else{
     
     df <- mismatchs[listed.ind, listed.ind]
     rownames(df) <- listed.ind
-     
+    degree.select <- degree.mm[listed.ind,listed.ind]
     
-    return(df)  
+    
+    return(list(df,degree.select))  
   }
-  
 }
+
+rownames(trial2)
+
+
+sdf[[1]][-which(rownames(sdf[[1]]) == "P_82008")]
+
+rownames(sdf[[1]])[-which(rownames(sdf[[1]]) == "P_82008")]
 
 recode.trunc <- readRDS(file = "recode_trunc.rds")
 
-og_pedigree[which(rownames(og_pedigree) %in% rownames(recode.trunc))]
 
 pit_names <- rownames(og_fixed)
 
 trial1 <- recode.trunc[rownames(og_fixed),rownames(og_fixed)]
 trial2 <- og_fixed
-tab.choice <- c("Head","Full")
 
+tab.choice <- c("Head","Full")
 
 
 ui <- fluidPage(
@@ -69,7 +91,14 @@ ui <- fluidPage(
     id = "tabset",
     tabPanel("Individuals",
               selectInput("code", "Individual", choices = pit_names),
-              radioButtons("head", choices= tab.choice, label=""),
+             fluidRow(
+               column(6,
+                      radioButtons("head", choices= tab.choice, label="") 
+                ),
+               column(6,
+                      checkboxInput("justmm","Just Mismatches?", value = F)
+                      )
+             ),
              tableOutput("ped_compare")
     ),
     tabPanel("Groups", 
@@ -81,8 +110,13 @@ ui <- fluidPage(
                   ),
                  column(2, 
                     actionButton("go", "Run"),
-                  )
+                  ), 
                ), 
+               fluidRow(
+                 column(6,
+                        radioButtons("dfchoice","", choices = c("Simple df", "Degree of MM"))
+                        )
+                  ),
                fluidRow(
                  column(6,
                         tableOutput("ped1")
@@ -105,14 +139,16 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   selected.ind <- reactive(ped_compare(trial1, trial2, 
-                                       input$code, listed.ind = NA, whole_df=F))
+                                       input$code, listed.ind = NA, whole_df=F, just.mism = input$justmm))
+
+  
   output$ped_compare <- renderTable(
     if (input$head == "Head"){
       head(selected.ind())
     }else{
       selected.ind()
-    }
-  )
+    })
+
   
   listed.sep <- eventReactive(input$go, {
     strsplit(gsub(" ", "", input$indlist),",")[[1]]
@@ -123,7 +159,8 @@ server <- function(input, output, session) {
   
   
   select.group <- reactive(ped_compare(trial1,trial2, selected.ind = NA, 
-                                       listed.ind = listed.sep(), whole_df = F))
+                                listed.ind = listed.sep(), whole_df = F, mm.deg = F))
+
   
   output$ped1 <- renderTable({
     data = ped1()
@@ -133,10 +170,13 @@ server <- function(input, output, session) {
     data = ped2()
   }, rownames = T, caption="Stud book")
   
-  output$multipedcomp <- renderTable({
-    data=select.group()
-  }, rownames=T, caption = "Mismatches")
-  
+  output$multipedcomp <- renderTable(
+    if (input$dfchoice == "Simple df"){
+      cbind(colnames(select.group()[[1]]),select.group()[[1]])
+    }else{
+      cbind(colnames(select.group()[[2]]),select.group()[[2]])
+    }
+  )
 }
 
 shinyApp(ui, server)
