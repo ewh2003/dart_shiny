@@ -1,6 +1,7 @@
 setwd(getwd())
 library(shiny)
 library(dartR)
+library(openxlsx)
 EMIBD9 <- readRDS(file = "emibd9_full.rds")
 full_recode <- readRDS(file = "full_recode.rds")
 og_fixed <- readRDS(file = "og_fixed.rds")
@@ -105,16 +106,22 @@ ui <- fluidPage(
              fluidPage(
                fluidRow(
                  column(8,
-                    textInput("indlist", "Type individuals (must be separated by comma)", 
-                          placeholder = NA)
+                    selectizeInput("indlist", "Type individuals (must be separated by comma)", 
+                          multiple = T, choices=rownames(trial1))
                   ),
                  column(2, 
                     actionButton("go", "Run"),
                   ), 
                ), 
                fluidRow(
-                 column(6,
+                 column(4,
                         radioButtons("dfchoice","", choices = c("Simple df", "Degree of MM"))
+                        ), 
+                 column(4, 
+                        downloadButton("download", "Download .xslx")
+                        ), 
+                 column(4, 
+                        textInput("dataname","Datasetname")
                         )
                   ),
                fluidRow(
@@ -139,20 +146,28 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   selected.ind <- reactive(ped_compare(trial1, trial2, 
-                                       input$code, listed.ind = NA, whole_df=F, just.mism = input$justmm))
+                                           input$code, listed.ind = NA, whole_df=F, just.mism = input$justmm))
+ 
+
+  output$ped_compare <- renderTable(
+    if(input$justmm == T){
+    if (input$head == "Head"){
+      head(as.data.frame(selected.ind())[as.data.frame(selected.ind())["Mismatches"]=="MisM",])
+    }else{
+      as.data.frame(selected.ind())[as.data.frame(selected.ind())["Mismatches"]=="MisM",]
+    }}else{
+      if (input$head == "Head"){
+        head(selected.ind())
+      }else{
+        selected.ind()
+    }})
 
   
-  output$ped_compare <- renderTable(
-    if (input$head == "Head"){
-      head(selected.ind())
-    }else{
-      selected.ind()
-    })
-
   
   listed.sep <- eventReactive(input$go, {
-    strsplit(gsub(" ", "", input$indlist),",")[[1]]
+    as.vector(input$indlist)
   })
+  
   
   ped1 <- reactive(trial1[listed.sep(),listed.sep()])
   ped2 <- reactive(trial2[listed.sep(),listed.sep()])
@@ -170,6 +185,7 @@ server <- function(input, output, session) {
     data = ped2()
   }, rownames = T, caption="Stud book")
   
+  
   output$multipedcomp <- renderTable(
     if (input$dfchoice == "Simple df"){
       cbind(colnames(select.group()[[1]]),select.group()[[1]])
@@ -177,9 +193,26 @@ server <- function(input, output, session) {
       cbind(colnames(select.group()[[2]]),select.group()[[2]])
     }
   )
+  
+  output$download <- downloadHandler(
+    filename = function() {
+      paste0(input$dataname, ".xlsx")
+    },
+    content = function(file) {
+      write.xlsx(list(ped1(),ped2(),cbind(colnames(select.group()[[2]]),select.group()[[2]])),sheetName=c("Studbook","EMIBD9","Mismatches")
+                 ,file = file)
+    }
+  )
+
+
 }
 
 shinyApp(ui, server)
+
+
+
+
+
 
 
 
