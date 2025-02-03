@@ -69,14 +69,6 @@ ped_compare <- function(ped1, ped2, whole_df = F ,selected.ind = NA, listed.ind 
   }
 }
 
-rownames(trial2)
-
-
-sdf[[1]][-which(rownames(sdf[[1]]) == "P_82008")]
-
-rownames(sdf[[1]])[-which(rownames(sdf[[1]]) == "P_82008")]
-
-recode.trunc <- readRDS(file = "recode_trunc.rds")
 
 
 pit_names <- rownames(og_fixed)
