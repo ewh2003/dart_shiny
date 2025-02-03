@@ -1,7 +1,6 @@
 setwd(getwd())
 library(shiny)
 library(dartR)
-library(openxlsx)
 if("openxlsx" %in% rownames(installed.packages()) == FALSE){install.packages("openxlsx")}else{library(openxlsx)
 }
 EMIBD9 <- readRDS(file = "emibd9_full.rds")
