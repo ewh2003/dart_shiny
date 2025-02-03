@@ -1,7 +1,10 @@
 setwd(getwd())
 library(shiny)
 library(dartR)
-if("openxlsx" %in% rownames(installed.packages()) == FALSE){install.packages("openxlsx")}
+if("openxlsx" %in% rownames(installed.packages()) == FALSE){
+  install.packages("openxlsx")
+  library(openxlsx)
+}
 EMIBD9 <- readRDS(file = "emibd9_full.rds")
 full_recode <- readRDS(file = "full_recode.rds")
 og_fixed <- readRDS(file = "og_fixed.rds")
@@ -69,7 +72,7 @@ ped_compare <- function(ped1, ped2, whole_df = F ,selected.ind = NA, listed.ind 
   }
 }
 
-
+recode.trunc <- readRDS("recode_trunc.rds")
 
 pit_names <- rownames(og_fixed)
 
